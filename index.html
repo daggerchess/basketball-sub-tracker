@@ -215,7 +215,7 @@
         <div class="modal"><h2>Rename Team</h2><input type="text" id="renameTeamName" placeholder="New Name" maxlength="30"><div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('renameTeamModal')">Cancel</button><button class="btn btn-primary" onclick="confirmRenameTeam()">Save</button></div></div>
     </div>
     <script>
-        let teams = {}, currentTeamId = null, roster = [], gameLength = 32, maxOnCourt = 5, gameTime = 0, isRunning = false, clockInterval = null, totalSubs = 0, currentTab = 'time', lastStatAction = null;
+        let teams = {}, currentTeamId = null, roster = [], gameLength = 32, maxOnCourt = 5, gameTime = 0, isRunning = false, clockInterval = null, totalSubs = 0, currentTab = 'time', lastStatAction = null, clockStartedAt = null, gameTimeWhenStarted = 0;
 
         function loadTeams() {
             const saved = localStorage.getItem('subtracker_teams');
@@ -316,13 +316,80 @@
         }
         function removePlayer(id) { const p = roster.find(x => x.id === id); if (p?.onCourt) { alert('Sub out first'); return; } roster = roster.filter(x => x.id !== id); saveCurrentTeam(); render(); }
         function togglePlayerActive(id) { const p = roster.find(x => x.id === id); if (p?.onCourt) { alert('Sub out first'); return; } if (p) { p.activeForGame = !p.activeForGame; saveCurrentTeam(); render(); } }
-        function subIn(id) { if (roster.filter(p => p.onCourt).length >= maxOnCourt) { alert('Max 5 on court'); return; } const p = roster.find(x => x.id === id); if (p) { p.onCourt = true; p.currentStintTime = 0; p.currentBenchTime = 0; totalSubs++; render(); } }
-        function subOut(id) { const p = roster.find(x => x.id === id); if (p) { p.onCourt = false; p.currentBenchTime = 0; render(); } }
+        function subIn(id) { if (roster.filter(p => p.onCourt).length >= maxOnCourt) { alert('Max 5 on court'); return; } const p = roster.find(x => x.id === id); if (p) { p.onCourt = true; p.currentStintTime = 0; p.currentBenchTime = 0; totalSubs++; if (isRunning) saveClockState(); render(); } }
+        function subOut(id) { const p = roster.find(x => x.id === id); if (p) { p.onCourt = false; p.currentBenchTime = 0; if (isRunning) saveClockState(); render(); } }
         function addStat(id, type, amt = 1) { const p = roster.find(x => x.id === id); if (p) { p.stats[type] += amt; lastStatAction = { id, type, amt }; renderStats(); } }
         function undoLastStat(id) { const p = roster.find(x => x.id === id); if (p && lastStatAction?.id === id) { p.stats[lastStatAction.type] = Math.max(0, p.stats[lastStatAction.type] - lastStatAction.amt); lastStatAction = null; renderStats(); } }
         function toggleClock() { isRunning ? pauseClock() : startClock(); }
-        function startClock() { isRunning = true; document.getElementById('clockSection').classList.add('clock-running'); document.getElementById('startBtn').innerHTML = '<span>⏸</span> Pause'; document.getElementById('startBtn').classList.remove('btn-primary'); document.getElementById('startBtn').classList.add('btn-secondary'); clockInterval = setInterval(() => { gameTime++; updatePlayerTimes(); updateTimeDisplays(); }, 1000); }
-        function pauseClock() { isRunning = false; document.getElementById('clockSection').classList.remove('clock-running'); document.getElementById('startBtn').innerHTML = '<span>▶</span> Start'; document.getElementById('startBtn').classList.remove('btn-secondary'); document.getElementById('startBtn').classList.add('btn-primary'); if (clockInterval) { clearInterval(clockInterval); clockInterval = null; } }
+        function startClock() { 
+            isRunning = true; 
+            clockStartedAt = Date.now(); 
+            gameTimeWhenStarted = gameTime;
+            saveClockState();
+            document.getElementById('clockSection').classList.add('clock-running'); 
+            document.getElementById('startBtn').innerHTML = '<span>⏸</span> Pause'; 
+            document.getElementById('startBtn').classList.remove('btn-primary'); 
+            document.getElementById('startBtn').classList.add('btn-secondary'); 
+            clockInterval = setInterval(tickClock, 1000); 
+        }
+        function tickClock() {
+            const now = Date.now();
+            const elapsed = Math.floor((now - clockStartedAt) / 1000);
+            const newGameTime = gameTimeWhenStarted + elapsed;
+            const timeDiff = newGameTime - gameTime;
+            if (timeDiff > 0) {
+                for (let i = 0; i < timeDiff; i++) {
+                    gameTime++;
+                    updatePlayerTimes();
+                }
+            }
+            updateTimeDisplays();
+        }
+        function saveClockState() {
+            if (isRunning) {
+                localStorage.setItem('subtracker_clockState', JSON.stringify({ running: true, startedAt: clockStartedAt, gameTimeWhenStarted, roster: roster.map(p => ({ id: p.id, onCourt: p.onCourt, totalPlayTime: p.totalPlayTime, totalBenchTime: p.totalBenchTime, currentStintTime: p.currentStintTime, currentBenchTime: p.currentBenchTime, stats: p.stats })) }));
+            } else {
+                localStorage.removeItem('subtracker_clockState');
+            }
+        }
+        function restoreClockState() {
+            const saved = localStorage.getItem('subtracker_clockState');
+            if (saved) {
+                const state = JSON.parse(saved);
+                if (state.running) {
+                    const now = Date.now();
+                    const elapsed = Math.floor((now - state.startedAt) / 1000);
+                    gameTime = state.gameTimeWhenStarted + elapsed;
+                    state.roster.forEach(savedP => {
+                        const p = roster.find(x => x.id === savedP.id);
+                        if (p) {
+                            p.onCourt = savedP.onCourt;
+                            p.stats = savedP.stats;
+                            if (p.onCourt) {
+                                p.totalPlayTime = savedP.totalPlayTime + elapsed;
+                                p.currentStintTime = savedP.currentStintTime + elapsed;
+                                p.totalBenchTime = savedP.totalBenchTime;
+                                p.currentBenchTime = 0;
+                            } else {
+                                p.totalBenchTime = savedP.totalBenchTime + elapsed;
+                                p.currentBenchTime = savedP.currentBenchTime + elapsed;
+                                p.totalPlayTime = savedP.totalPlayTime;
+                                p.currentStintTime = 0;
+                            }
+                        }
+                    });
+                    clockStartedAt = Date.now();
+                    gameTimeWhenStarted = gameTime;
+                    isRunning = true;
+                    document.getElementById('clockSection').classList.add('clock-running');
+                    document.getElementById('startBtn').innerHTML = '<span>⏸</span> Pause';
+                    document.getElementById('startBtn').classList.remove('btn-primary');
+                    document.getElementById('startBtn').classList.add('btn-secondary');
+                    clockInterval = setInterval(tickClock, 1000);
+                }
+            }
+        }
+        function pauseClock() { isRunning = false; clockStartedAt = null; localStorage.removeItem('subtracker_clockState'); document.getElementById('clockSection').classList.remove('clock-running'); document.getElementById('startBtn').innerHTML = '<span>▶</span> Start'; document.getElementById('startBtn').classList.remove('btn-secondary'); document.getElementById('startBtn').classList.add('btn-primary'); if (clockInterval) { clearInterval(clockInterval); clockInterval = null; } }
         function updatePlayerTimes() { roster.forEach(p => { if (p.activeForGame) { if (p.onCourt) { p.totalPlayTime++; p.currentStintTime++; } else { p.totalBenchTime++; p.currentBenchTime++; } } }); }
         function updateTimeDisplays() {
             document.getElementById('clockDisplay').textContent = formatTime(gameTime);
@@ -341,7 +408,7 @@
             });
         }
         function resetGame() { document.getElementById('resetModal').classList.add('active'); }
-        function confirmReset() { pauseClock(); gameTime = 0; totalSubs = 0; roster.forEach(p => { p.onCourt = false; p.totalPlayTime = 0; p.currentStintTime = 0; p.totalBenchTime = 0; p.currentBenchTime = 0; p.stats = { pts: 0, reb: 0, stl: 0, ast: 0, blk: 0, fouls: 0 }; }); closeModal('resetModal'); render(); }
+        function confirmReset() { pauseClock(); gameTime = 0; totalSubs = 0; localStorage.removeItem('subtracker_clockState'); roster.forEach(p => { p.onCourt = false; p.totalPlayTime = 0; p.currentStintTime = 0; p.totalBenchTime = 0; p.currentBenchTime = 0; p.stats = { pts: 0, reb: 0, stl: 0, ast: 0, blk: 0, fouls: 0 }; }); closeModal('resetModal'); render(); }
         function updateGameLength() { gameLength = parseInt(document.getElementById('gameLength').value) || 32; saveCurrentTeam(); render(); }
         function renderPlayerCard(p, loc) {
             const sc = p.currentStintTime >= 360 ? 'danger' : p.currentStintTime >= 240 ? 'warning' : '';
@@ -381,7 +448,9 @@
         document.getElementById('playerName').addEventListener('keypress', e => { if (e.key === 'Enter') addPlayer(); });
         document.getElementById('newTeamName').addEventListener('keypress', e => { if (e.key === 'Enter') createNewTeam(); });
         document.getElementById('renameTeamName').addEventListener('keypress', e => { if (e.key === 'Enter') confirmRenameTeam(); });
-        loadTeams(); render();
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && isRunning) { tickClock(); render(); } });
+        window.addEventListener('focus', () => { if (isRunning) { tickClock(); render(); } });
+        loadTeams(); restoreClockState(); render();
     </script>
 </body>
 </html>
