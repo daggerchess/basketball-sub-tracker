@@ -297,7 +297,7 @@
             border-radius: 12px;
             padding: 1rem;
             display: grid;
-            grid-template-columns: auto 1fr auto;
+            grid-template-columns: 1fr auto;
             align-items: center;
             gap: 1rem;
             transition: all 0.2s ease;
@@ -648,7 +648,7 @@
             }
 
             .player-card {
-                grid-template-columns: 40px 1fr 44px;
+                grid-template-columns: 1fr 44px;
                 gap: 0.5rem;
                 padding: 0.75rem;
             }
@@ -800,7 +800,6 @@
             <div class="section-body">
                 <div class="add-player-form">
                     <input type="text" id="playerName" placeholder="Player Name" maxlength="20">
-                    <input type="number" id="playerNumber" placeholder="#" min="0" max="99">
                     <button class="btn btn-gold" onclick="addPlayer()">+ Add Player</button>
                 </div>
                 <p style="color: var(--text-muted); font-size: 0.75rem; padding: 0 1rem; margin-bottom: 0.5rem;">
@@ -890,26 +889,17 @@
         // Add player to roster
         function addPlayer() {
             const nameInput = document.getElementById('playerName');
-            const numberInput = document.getElementById('playerNumber');
             
             const name = nameInput.value.trim();
-            const number = numberInput.value.trim();
 
             if (!name) {
                 alert('Please enter a player name');
                 return;
             }
 
-            // Check for duplicate number
-            if (number && roster.some(p => p.number === number)) {
-                alert('A player with this number already exists');
-                return;
-            }
-
             const player = {
                 id: Date.now(),
                 name: name,
-                number: number || '?',
                 activeForGame: true,
                 onCourt: false,
                 totalPlayTime: 0,
@@ -923,7 +913,6 @@
             render();
 
             nameInput.value = '';
-            numberInput.value = '';
             nameInput.focus();
         }
 
@@ -1137,7 +1126,6 @@
             
             return `
                 <div class="player-card ${location === 'court' ? 'on-court' : 'on-bench'}" data-player-id="${player.id}">
-                    <div class="player-number">${player.number}</div>
                     <div class="player-info">
                         <div class="player-name">${player.name}</div>
                         <div class="player-times">
@@ -1176,7 +1164,6 @@
         function renderRosterChip(player) {
             return `
                 <div class="roster-chip ${player.activeForGame ? 'active' : 'inactive'}">
-                    <span class="chip-number">#${player.number}</span>
                     <span class="chip-name">${player.name}</span>
                     <button class="chip-toggle ${player.activeForGame ? 'toggle-active' : 'toggle-inactive'}" 
                             onclick="togglePlayerActive(${player.id})" 
@@ -1236,12 +1223,8 @@
             if (roster.length === 0) {
                 rosterList.innerHTML = '<p style="color: var(--text-muted); padding: 1rem;">No players in roster. Add players above.</p>';
             } else {
-                // Sort by number
-                const sortedRoster = [...roster].sort((a, b) => {
-                    const numA = parseInt(a.number) || 999;
-                    const numB = parseInt(b.number) || 999;
-                    return numA - numB;
-                });
+                // Sort alphabetically by name
+                const sortedRoster = [...roster].sort((a, b) => a.name.localeCompare(b.name));
                 rosterList.innerHTML = sortedRoster.map(p => renderRosterChip(p)).join('');
             }
 
@@ -1263,12 +1246,6 @@
 
         // Handle Enter key in input fields
         document.getElementById('playerName').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                document.getElementById('playerNumber').focus();
-            }
-        });
-
-        document.getElementById('playerNumber').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 addPlayer();
             }
