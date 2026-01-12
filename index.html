@@ -229,7 +229,21 @@
         }
         function createDefaultTeam() {
             const id = 'team_' + Date.now();
-            teams[id] = { name: 'My Team', players: [], gameLength: 32 };
+            teams[id] = { 
+                name: 'Homestead', 
+                players: [
+                    { id: 1, name: 'Liam', activeForGame: true },
+                    { id: 2, name: 'Kray', activeForGame: true },
+                    { id: 3, name: 'Benjamin', activeForGame: true },
+                    { id: 4, name: 'Bryson', activeForGame: true },
+                    { id: 5, name: 'Clark', activeForGame: true },
+                    { id: 6, name: 'Elliot', activeForGame: true },
+                    { id: 7, name: 'Nile', activeForGame: true },
+                    { id: 8, name: 'Ryleigh', activeForGame: true },
+                    { id: 9, name: 'Caitlin', activeForGame: true }
+                ], 
+                gameLength: 32 
+            };
             currentTeamId = id;
             saveTeams();
         }
